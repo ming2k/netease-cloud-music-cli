@@ -82,10 +82,13 @@ class Downloader:
             overwrite: Whether to overwrite existing files
         """
         self.client = client
+        # Use anonymous client for URL fetching (avoids CDN auth issues)
+        self._url_client = NCMClient()
         self.output_dir = Path(output_dir)
         self.quality = quality
         self.filename_template = filename_template
         self.overwrite = overwrite
+        self.last_error: Optional[str] = None
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -119,7 +122,11 @@ class Downloader:
             True if successful, False otherwise
         """
         try:
-            response = requests.get(url, stream=True, timeout=60)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://music.163.com/',
+            }
+            response = requests.get(url, headers=headers, stream=True, timeout=60)
             response.raise_for_status()
 
             total_size = int(response.headers.get('content-length', 0))
@@ -135,8 +142,16 @@ class Downloader:
 
             return True
 
-        except Exception:
-            # Clean up partial file
+        except requests.HTTPError as e:
+            if e.response.status_code == 403:
+                self.last_error = "Access denied (403) - may be region/IP restricted or require VIP"
+            else:
+                self.last_error = f"HTTP {e.response.status_code}: Download failed"
+            if output_path.exists():
+                output_path.unlink()
+            return False
+        except Exception as e:
+            self.last_error = str(e)
             if output_path.exists():
                 output_path.unlink()
             return False
@@ -171,19 +186,60 @@ class Downloader:
         song = songs[0]
 
         # Get download URL
-        song_url = self.client.get_download_url(song_id, quality)
-        if not song_url or not song_url.url:
-            # Try lower qualities
-            fallback_qualities = ['hires', 'lossless', 'exhigh', 'higher', 'standard']
-            for q in fallback_qualities:
-                if q == quality:
-                    continue
-                song_url = self.client.get_download_url(song_id, q)
-                if song_url and song_url.url:
-                    quality = q
-                    break
+        fallback_qualities = ['jymaster', 'sky', 'jyeffect', 'hires', 'lossless', 'exhigh', 'higher', 'standard']
+        song_url = None
+        is_vip_song = song.fee in [1, 4]
+
+        # For VIP songs, try EAPI (mobile app API) first with authenticated client
+        # Use streaming URL API (better quality support than download API)
+        if is_vip_song:
+            # Try EAPI streaming URL with requested quality
+            urls = self.client.get_song_url_eapi([song_id], quality)
+            if urls and urls[0].url:
+                song_url = urls[0]
             else:
-                return None
+                # Try fallback qualities
+                for q in fallback_qualities:
+                    if q == quality:
+                        continue
+                    urls = self.client.get_song_url_eapi([song_id], q)
+                    if urls and urls[0].url:
+                        song_url = urls[0]
+                        quality = q
+                        break
+
+        # Fall back to WEAPI (anonymous client works for free songs)
+        if not song_url or not song_url.url:
+            for url_client in [self._url_client, self.client]:
+                # Try download URL API
+                song_url = url_client.get_download_url(song_id, quality)
+                if song_url and song_url.url:
+                    break
+
+                # Try lower qualities with download API
+                for q in fallback_qualities:
+                    if q == quality:
+                        continue
+                    song_url = url_client.get_download_url(song_id, q)
+                    if song_url and song_url.url:
+                        quality = q
+                        break
+                if song_url and song_url.url:
+                    break
+
+                # Try streaming URL API as fallback
+                for q in fallback_qualities:
+                    urls = url_client.get_song_url([song_id], q)
+                    if urls and urls[0].url:
+                        song_url = urls[0]
+                        quality = q
+                        break
+                if song_url and song_url.url:
+                    break
+
+        if not song_url or not song_url.url:
+            self.last_error = f"Song requires VIP (fee={song.fee})" if is_vip_song else "Song unavailable"
+            return None
 
         # Determine extension
         extension = song_url.type or self.EXTENSIONS.get(quality, 'mp3')

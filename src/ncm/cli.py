@@ -198,7 +198,7 @@ def search(ctx: click.Context, keyword: str, limit: int, page: int, as_json: boo
 @click.argument('song_ids', nargs=-1, type=int, required=True)
 @click.option(
     '--quality', '-q',
-    type=click.Choice(['standard', 'higher', 'exhigh', 'lossless', 'hires']),
+    type=click.Choice(['standard', 'higher', 'exhigh', 'lossless', 'hires', 'jyeffect', 'sky', 'jymaster']),
     default='exhigh',
     help='Audio quality (default: exhigh/320kbps)'
 )
@@ -268,7 +268,8 @@ def download(
             console.print(f"[green]✓ Saved to: {path}[/green]\n")
             success_count += 1
         else:
-            console.print(f"[red]✗ Failed to download song {song_id}[/red]\n")
+            error_msg = downloader.last_error or "Unknown error"
+            console.print(f"[red]✗ Failed: {error_msg}[/red]\n")
             fail_count += 1
 
     # Summary
@@ -282,7 +283,7 @@ def download(
 @click.argument('playlist_id', type=int)
 @click.option(
     '--quality', '-q',
-    type=click.Choice(['standard', 'higher', 'exhigh', 'lossless', 'hires']),
+    type=click.Choice(['standard', 'higher', 'exhigh', 'lossless', 'hires', 'jyeffect', 'sky', 'jymaster']),
     default='exhigh',
     help='Audio quality'
 )
@@ -356,7 +357,7 @@ def playlist(
 @click.argument('album_id', type=int)
 @click.option(
     '--quality', '-q',
-    type=click.Choice(['standard', 'higher', 'exhigh', 'lossless', 'hires']),
+    type=click.Choice(['standard', 'higher', 'exhigh', 'lossless', 'hires', 'jyeffect', 'sky', 'jymaster']),
     default='exhigh',
     help='Audio quality'
 )

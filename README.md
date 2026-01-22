@@ -10,9 +10,17 @@ A command-line tool for searching and downloading music from Netease Cloud Music
 
 **If there is any infringement, please contact for removal!**
 
+## Known Limitations
+
+- **VIP songs**: Download may fail with 403 error due to Netease CDN restrictions. This is a server-side limitation.
+- **Region restrictions**: Some content may be restricted based on IP/region.
+- **Rate limiting**: Excessive requests may trigger temporary blocks.
+
 ## API Reference
 
-The API interfaces in this project are based on [chaunsin/netease-cloud-music](https://github.com/chaunsin/netease-cloud-music).
+The API interfaces in this project are based on:
+- [chaunsin/netease-cloud-music](https://github.com/chaunsin/netease-cloud-music)
+- [XiaoMengXinX/Music163bot-Go](https://github.com/XiaoMengXinX/Music163bot-Go)
 
 ## Installation
 
@@ -138,13 +146,18 @@ ncm me
 
 ## Quality Levels
 
-| Level | Format | Bitrate | Description |
-|-------|--------|---------|-------------|
-| `standard` | MP3 | 128kbps | Standard quality |
-| `higher` | MP3 | 192kbps | Higher quality |
-| `exhigh` | MP3 | 320kbps | HQ (High Quality) |
-| `lossless` | FLAC | ~1000kbps | SQ (Super Quality) |
-| `hires` | FLAC | - | Hi-Res |
+| Level | Format | Description |
+|-------|--------|-------------|
+| `standard` | MP3 128kbps | Standard quality |
+| `higher` | MP3 192kbps | Higher quality |
+| `exhigh` | MP3 320kbps | HQ (High Quality) |
+| `lossless` | FLAC | SQ (Super Quality) |
+| `hires` | FLAC | Hi-Res |
+| `jyeffect` | FLAC | HD Surround |
+| `sky` | FLAC | Immersive Surround |
+| `jymaster` | FLAC | Master Quality (highest) |
+
+Note: Higher quality levels (jyeffect, sky, jymaster) require SVIP and may not be available for all songs.
 
 ## Login & Authentication
 

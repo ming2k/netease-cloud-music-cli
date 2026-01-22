@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any
 
 import requests
 
-from .crypto import weapi_encrypt
+from .crypto import weapi_encrypt, eapi_encrypt
 from .models import Song, SongUrl, Playlist, SearchResult, Lyric, Album, Artist
 
 
@@ -41,6 +41,14 @@ class NCMClient:
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
     }
 
+    # Mobile app headers for EAPI
+    EAPI_HEADERS = {
+        'User-Agent': 'NeteaseMusic/9.3.40.250202172443(9003040);Dalvik/2.1.0 (Linux; U; Android 14; Pixel 8 Build/UQ1A.240205.004)',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': '*/*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    }
+
     # Search types
     SEARCH_TYPE_SONG = 1
     SEARCH_TYPE_ALBUM = 10
@@ -50,11 +58,14 @@ class NCMClient:
     SEARCH_TYPE_LYRIC = 1006
 
     # Quality levels (from lowest to highest)
-    QUALITY_STANDARD = 'standard'   # 128kbps
-    QUALITY_HIGHER = 'higher'       # 192kbps
-    QUALITY_EXHIGH = 'exhigh'       # 320kbps (HQ)
-    QUALITY_LOSSLESS = 'lossless'   # ~1000kbps (SQ)
-    QUALITY_HIRES = 'hires'         # Hi-Res
+    QUALITY_STANDARD = 'standard'   # 128kbps MP3
+    QUALITY_HIGHER = 'higher'       # 192kbps MP3
+    QUALITY_EXHIGH = 'exhigh'       # 320kbps MP3 (HQ)
+    QUALITY_LOSSLESS = 'lossless'   # FLAC (SQ)
+    QUALITY_HIRES = 'hires'         # Hi-Res FLAC
+    QUALITY_JYEFFECT = 'jyeffect'   # HD Surround FLAC
+    QUALITY_SKY = 'sky'             # Immersive Surround FLAC
+    QUALITY_JYMASTER = 'jymaster'   # Master Quality FLAC
 
     def __init__(
         self,
@@ -113,6 +124,65 @@ class NCMClient:
             response.raise_for_status()
             # Store the last response for cookie extraction
             self._last_response = response
+            return response.json()
+        except requests.Timeout:
+            return {'code': -1, 'message': 'Request timeout'}
+        except requests.RequestException as e:
+            return {'code': -1, 'message': str(e)}
+        except json.JSONDecodeError:
+            return {'code': -1, 'message': 'Invalid JSON response'}
+
+    def _eapi_request(
+        self,
+        path: str,
+        data: Dict[str, Any]
+    ) -> Dict:
+        """
+        Make an EAPI request (mobile app API).
+
+        Args:
+            path: API path (e.g., '/api/song/enhance/player/url/v1')
+            data: Request payload
+
+        Returns:
+            API response as dictionary
+        """
+        url = f"https://music.163.com/eapi{path[4:]}"  # /api/... -> /eapi/...
+
+        encrypted_body = eapi_encrypt(path, data)
+
+        # Build cookies for EAPI
+        import time
+        import random
+        import string
+        device_id = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+        cookies = {
+            'appver': '9.3.40',
+            'buildver': str(int(time.time()))[:10],
+            'os': 'android',
+            'deviceId': device_id,
+            'channel': 'xiaomi',
+            'osver': '14',
+        }
+
+        # Add MUSIC_U from session if available
+        if 'Cookie' in self.session.headers:
+            cookie_str = self.session.headers['Cookie']
+            if 'MUSIC_U=' in cookie_str:
+                for part in cookie_str.split(';'):
+                    if 'MUSIC_U=' in part:
+                        cookies['MUSIC_U'] = part.split('=', 1)[1].strip()
+                        break
+
+        try:
+            response = requests.post(
+                url,
+                data=encrypted_body,
+                headers=self.EAPI_HEADERS,
+                cookies=cookies,
+                timeout=self.timeout
+            )
+            response.raise_for_status()
             return response.json()
         except requests.Timeout:
             return {'code': -1, 'message': 'Request timeout'}
@@ -239,6 +309,75 @@ class NCMClient:
             'level': level
         }
         response = self._request('/weapi/song/enhance/download/url/v1', data)
+
+        if response.get('code') != 200:
+            return None
+
+        data = response.get('data', {})
+        if not data.get('url'):
+            return None
+
+        return SongUrl.from_dict(data)
+
+    def get_song_url_eapi(
+        self,
+        song_ids: List[int],
+        level: str = QUALITY_STANDARD
+    ) -> List[SongUrl]:
+        """
+        Get streaming URLs for songs using EAPI (mobile app API).
+
+        This may work better for VIP songs as it uses the mobile app protocol.
+
+        Args:
+            song_ids: List of song IDs
+            level: Quality level (standard, higher, exhigh, lossless, hires)
+
+        Returns:
+            List of SongUrl objects
+        """
+        data = {
+            'ids': json.dumps([str(sid) for sid in song_ids]),
+            'level': level,
+            'encodeType': 'flac' if level in ['lossless', 'hires'] else 'mp3'
+        }
+        response = self._eapi_request('/api/song/enhance/player/url/v1', data)
+
+        if response.get('code') != 200:
+            return []
+
+        return [SongUrl.from_dict(u) for u in response.get('data', [])]
+
+    def get_download_url_eapi(
+        self,
+        song_id: int,
+        level: str = QUALITY_LOSSLESS
+    ) -> Optional[SongUrl]:
+        """
+        Get download URL for a song using EAPI (mobile app API).
+
+        This may work better for VIP songs as it uses the mobile app protocol.
+
+        Args:
+            song_id: Song ID
+            level: Quality level (standard, higher, exhigh, lossless, hires)
+
+        Returns:
+            SongUrl object or None if not available
+        """
+        # Map quality level to bitrate
+        br_map = {
+            'standard': 128000,
+            'higher': 192000,
+            'exhigh': 320000,
+            'lossless': 999000,
+            'hires': 999000,
+        }
+        data = {
+            'id': song_id,
+            'br': br_map.get(level, 999000)
+        }
+        response = self._eapi_request('/api/song/enhance/download/url', data)
 
         if response.get('code') != 200:
             return None
