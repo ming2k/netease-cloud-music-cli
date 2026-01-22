@@ -616,8 +616,8 @@ def me(ctx: click.Context):
         console.print("[dim]Run 'ncm login' to authenticate[/dim]")
         return
 
-    account = user_info.get('account', {})
-    profile = user_info.get('profile', {})
+    account = user_info.get('account') or {}
+    profile = user_info.get('profile') or {}
 
     vip_types = {0: 'None', 1: 'VIP', 11: 'SVIP'}
     vip_type = vip_types.get(account.get('vipType', 0), str(account.get('vipType', 0)))

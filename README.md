@@ -24,6 +24,40 @@ The API interfaces in this project are based on:
 
 ## Installation
 
+### Standalone Binary (Recommended)
+
+Download the pre-built binary for your platform from the [Releases](https://github.com/ming2k/netease-cloud-music-cli/releases) page:
+
+```bash
+# Linux/macOS
+chmod +x ncm
+sudo mv ncm /usr/local/bin/
+
+# Or add to your PATH
+mv ncm ~/.local/bin/
+```
+
+For Windows, download `ncm.exe` and add it to your PATH.
+
+### Build Standalone Binary
+
+To build the standalone binary yourself:
+
+```bash
+# Install package and build dependencies
+pip install -e ".[build]"
+
+# Build the binary
+pyinstaller --onefile --name ncm --paths=src src/ncm/__main__.py
+
+# The binary will be in dist/ncm
+./dist/ncm --help
+```
+
+**Note**: Make sure all dependencies are installed (`pip install -e .`) before running PyInstaller.
+
+### Install from Source
+
 ```bash
 # Clone the repository
 git clone <your-repo-url>
@@ -199,6 +233,7 @@ ncm logout
 src/
 └── ncm/
     ├── __init__.py      # Package initialization
+    ├── __main__.py      # Entry point (python -m ncm)
     ├── cli.py           # CLI interface (Click)
     ├── client.py        # API client
     ├── crypto.py        # Encryption utilities

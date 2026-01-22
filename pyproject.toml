@@ -47,6 +47,9 @@ dev = [
     "mypy>=1.0.0",
     "types-requests>=2.28.0",
 ]
+build = [
+    "pyinstaller>=6.0.0",
+]
 
 [project.scripts]
 ncm = "ncm.cli:main"

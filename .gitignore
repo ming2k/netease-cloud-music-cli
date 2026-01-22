@@ -38,3 +38,6 @@ Thumbs.db
 # Project specific
 downloads/
 *.lrc
+
+# PyInstaller
+*.spec
